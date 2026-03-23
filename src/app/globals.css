@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-factory-bg text-factory-text antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-factory-card border border-factory-border rounded-lg;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-factory-accent text-white font-medium rounded-lg 
+           hover:bg-factory-accent-hover transition-colors disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-factory-card text-factory-text font-medium rounded-lg 
+           border border-factory-border hover:bg-factory-hover transition-colors disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 bg-factory-error/10 text-factory-error font-medium rounded-lg 
+           border border-factory-error/30 hover:bg-factory-error/20 transition-colors;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 bg-factory-bg border border-factory-border rounded-lg 
+           text-factory-text placeholder-factory-text-dim
+           focus:outline-none focus:ring-2 focus:ring-factory-accent focus:border-transparent;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-factory-text-muted mb-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-draft {
+    @apply bg-factory-text-dim/20 text-factory-text-muted;
+  }
+
+  .badge-submitted {
+    @apply bg-factory-accent/20 text-factory-accent;
+  }
+
+  .badge-approved {
+    @apply bg-factory-success/20 text-factory-success;
+  }
+
+  .stat-card {
+    @apply card p-5;
+  }
+
+  .stat-label {
+    @apply text-sm font-medium text-factory-text-muted;
+  }
+
+  .stat-value {
+    @apply mt-2 text-2xl font-bold font-mono text-factory-text;
+  }
+}
