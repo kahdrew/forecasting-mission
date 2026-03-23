@@ -80,6 +80,42 @@ export function getWeekEndDate(fiscalYear: number, week: number): Date {
   return end;
 }
 
+// Get the fiscal quarter (1-4) for a given fiscal week (1-52)
+// Q1: Weeks 1-13, Q2: Weeks 14-26, Q3: Weeks 27-39, Q4: Weeks 40-52
+export function getQuarterFromWeek(week: number): number {
+  if (week <= 13) return 1;
+  if (week <= 26) return 2;
+  if (week <= 39) return 3;
+  return 4;
+}
+
+// Get the weeks that belong to a fiscal quarter
+export function getWeeksInQuarter(quarter: number): { start: number; end: number } {
+  switch (quarter) {
+    case 1: return { start: 1, end: 13 };
+    case 2: return { start: 14, end: 26 };
+    case 3: return { start: 27, end: 39 };
+    case 4: return { start: 40, end: 52 };
+    default: return { start: 1, end: 13 };
+  }
+}
+
+// Get current submission period (week) and target period (quarter)
+export function getCurrentSubmissionAndTarget(): {
+  submissionPeriod: { week: number; year: number };
+  targetPeriod: { quarter: number; year: number };
+} {
+  const now = new Date();
+  const fiscalYear = getFiscalYear(now);
+  const week = getWeekNumber(now);
+  const quarter = getQuarterFromWeek(week);
+  
+  return {
+    submissionPeriod: { week, year: fiscalYear },
+    targetPeriod: { quarter, year: fiscalYear },
+  };
+}
+
 // Fiscal month: 1 = February, 2 = March, ..., 12 = January
 export function getFiscalMonth(date: Date): number {
   const month = date.getMonth(); // 0-indexed

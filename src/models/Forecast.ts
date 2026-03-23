@@ -33,6 +33,18 @@ export interface IPeriod {
   value: number; // week 1-53, month 1-12, quarter 1-4, day 1-366
 }
 
+// Submission period tracks when the forecast was entered (weekly)
+// Target period tracks what the forecast is for (quarterly)
+export interface ISubmissionPeriod {
+  week: number;
+  year: number;
+}
+
+export interface ITargetPeriod {
+  quarter: number;
+  year: number;
+}
+
 export interface IForecast extends Document {
   _id: mongoose.Types.ObjectId;
   opportunityId: string | null;
@@ -41,6 +53,8 @@ export interface IForecast extends Document {
   repId: mongoose.Types.ObjectId;
   repName: string;
   period: IPeriod;
+  submissionPeriod: ISubmissionPeriod; // When forecast was entered (weekly)
+  targetPeriod: ITargetPeriod; // What quarter the forecast is for
   categories: IForecastCategories;
   adjustments: IAdjustment[];
   sfData: ISalesforceData | null;
@@ -58,6 +72,22 @@ const PeriodSchema = new Schema<IPeriod>(
     type: { type: String, enum: ['daily', 'weekly', 'monthly', 'quarterly'], required: true },
     year: { type: Number, required: true },
     value: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
+const SubmissionPeriodSchema = new Schema<ISubmissionPeriod>(
+  {
+    week: { type: Number, required: true, min: 1, max: 53 },
+    year: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
+const TargetPeriodSchema = new Schema<ITargetPeriod>(
+  {
+    quarter: { type: Number, required: true, min: 1, max: 4 },
+    year: { type: Number, required: true },
   },
   { _id: false }
 );
@@ -102,6 +132,8 @@ const ForecastSchema = new Schema<IForecast>(
     repId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     repName: { type: String, required: true },
     period: { type: PeriodSchema, required: true },
+    submissionPeriod: { type: SubmissionPeriodSchema, required: true },
+    targetPeriod: { type: TargetPeriodSchema, required: true },
     categories: { type: ForecastCategoriesSchema, required: true },
     adjustments: { type: [AdjustmentSchema], default: [] },
     sfData: { type: SalesforceDataSchema, default: null },
@@ -114,10 +146,11 @@ const ForecastSchema = new Schema<IForecast>(
   { timestamps: true }
 );
 
-ForecastSchema.index({ repId: 1, 'period.type': 1, 'period.year': 1, 'period.value': 1 });
+ForecastSchema.index({ repId: 1, 'submissionPeriod.year': 1, 'submissionPeriod.week': 1 });
+ForecastSchema.index({ repId: 1, 'targetPeriod.year': 1, 'targetPeriod.quarter': 1 });
 ForecastSchema.index({ opportunityId: 1 });
 ForecastSchema.index({ status: 1 });
-ForecastSchema.index({ 'period.type': 1, 'period.year': 1, 'period.value': 1 });
+ForecastSchema.index({ 'targetPeriod.year': 1, 'targetPeriod.quarter': 1 });
 
 export const Forecast: Model<IForecast> =
   mongoose.models.Forecast || mongoose.model<IForecast>('Forecast', ForecastSchema);

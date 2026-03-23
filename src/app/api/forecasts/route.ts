@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
-import { Forecast, PeriodType } from '@/models/Forecast';
+import { Forecast } from '@/models/Forecast';
 import { getCurrentUser } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
 import { createHistoryEntry } from '@/lib/history';
@@ -15,9 +15,12 @@ export async function GET(request: NextRequest) {
     await connectToDatabase();
 
     const searchParams = request.nextUrl.searchParams;
-    const periodType = searchParams.get('periodType') as PeriodType | null;
-    const year = searchParams.get('year');
-    const value = searchParams.get('value');
+    // Submission period (weekly) filters
+    const submissionWeek = searchParams.get('submissionWeek');
+    const submissionYear = searchParams.get('submissionYear');
+    // Target period (quarterly) filters
+    const targetQuarter = searchParams.get('targetQuarter');
+    const targetYear = searchParams.get('targetYear');
     const status = searchParams.get('status');
     const repId = searchParams.get('repId');
 
@@ -29,13 +32,18 @@ export async function GET(request: NextRequest) {
       query.repId = user._id;
     }
 
-    if (periodType) query['period.type'] = periodType;
-    if (year) query['period.year'] = parseInt(year);
-    if (value) query['period.value'] = parseInt(value);
+    // Filter by submission period (when entered)
+    if (submissionWeek) query['submissionPeriod.week'] = parseInt(submissionWeek);
+    if (submissionYear) query['submissionPeriod.year'] = parseInt(submissionYear);
+    
+    // Filter by target period (what quarter it's for)
+    if (targetQuarter) query['targetPeriod.quarter'] = parseInt(targetQuarter);
+    if (targetYear) query['targetPeriod.year'] = parseInt(targetYear);
+    
     if (status) query.status = status;
 
     const forecasts = await Forecast.find(query)
-      .sort({ 'period.year': -1, 'period.value': -1, createdAt: -1 })
+      .sort({ 'submissionPeriod.year': -1, 'submissionPeriod.week': -1, createdAt: -1 })
       .lean();
 
     return NextResponse.json({
@@ -66,18 +74,26 @@ export async function POST(request: NextRequest) {
       opportunityId,
       opportunityName,
       accountName,
-      period,
+      submissionPeriod,
+      targetPeriod,
       categories,
       sfData,
       matchType,
     } = body;
 
-    if (!accountName || !period) {
+    if (!accountName || !submissionPeriod || !targetPeriod) {
       return NextResponse.json(
-        { error: 'Account name and period are required' },
+        { error: 'Account name, submission period, and target period are required' },
         { status: 400 }
       );
     }
+
+    // Legacy period field for backwards compatibility
+    const period = {
+      type: 'weekly' as const,
+      year: submissionPeriod.year,
+      value: submissionPeriod.week,
+    };
 
     const forecast = await Forecast.create({
       opportunityId: opportunityId || null,
@@ -86,6 +102,8 @@ export async function POST(request: NextRequest) {
       repId: user._id,
       repName: user.name,
       period,
+      submissionPeriod,
+      targetPeriod,
       categories: categories || { commit: 0, consumption: 0, bestCase: 0, services: 0 },
       sfData: sfData || null,
       matchType: matchType || 'unmatched',

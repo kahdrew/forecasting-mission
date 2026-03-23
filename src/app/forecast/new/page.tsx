@@ -3,9 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import PeriodSelector from '@/components/PeriodSelector';
 import ForecastCategoryInput from '@/components/ForecastCategoryInput';
-import { PeriodType } from '@/models/Period';
 
 interface User {
   _id: string;
@@ -33,22 +31,50 @@ interface ForecastCategories {
   services: number;
 }
 
+// Fiscal year helpers
+function getFiscalYear(date: Date): number {
+  const month = date.getMonth();
+  const year = date.getFullYear();
+  return month < 1 ? year : year + 1;
+}
+
 function getWeekNumber(date: Date): number {
+  const fiscalYear = getFiscalYear(date);
+  const fiscalYearStart = new Date(Date.UTC(fiscalYear - 1, 1, 1));
+  const firstMonday = new Date(fiscalYearStart);
+  const dayOfWeek = firstMonday.getUTCDay();
+  const daysUntilMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+  firstMonday.setUTCDate(firstMonday.getUTCDate() + daysUntilMonday);
+  
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  const diffDays = Math.floor((d.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) return 52;
+  return Math.min(52, Math.floor(diffDays / 7) + 1);
+}
+
+function getQuarterFromWeek(week: number): number {
+  if (week <= 13) return 1;
+  if (week <= 26) return 2;
+  if (week <= 39) return 3;
+  return 4;
 }
 
 export default function NewForecastPage() {
   const router = useRouter();
   const now = new Date();
+  const fiscalYear = getFiscalYear(now);
+  const currentWeek = getWeekNumber(now);
+  const currentQuarter = getQuarterFromWeek(currentWeek);
 
   const [user, setUser] = useState<User | null>(null);
-  const [periodType, setPeriodType] = useState<PeriodType>('weekly');
-  const [year, setYear] = useState(now.getFullYear());
-  const [value, setValue] = useState(getWeekNumber(now));
+  // Submission period (when entering - always current week)
+  const [submissionWeek] = useState(currentWeek);
+  const [submissionYear] = useState(fiscalYear);
+  // Target period (what quarter this forecast is for)
+  const [targetQuarter, setTargetQuarter] = useState(currentQuarter);
+  const [targetYear, setTargetYear] = useState(fiscalYear);
+  
   const [accountName, setAccountName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -130,7 +156,8 @@ export default function NewForecastPage() {
           opportunityId: selectedOpp?.sfId || null,
           opportunityName: selectedOpp?.name || null,
           accountName,
-          period: { type: periodType, year, value },
+          submissionPeriod: { week: submissionWeek, year: submissionYear },
+          targetPeriod: { quarter: targetQuarter, year: targetYear },
           categories,
           sfData: selectedOpp
             ? {
@@ -189,23 +216,64 @@ export default function NewForecastPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-factory-text">New Forecast</h1>
-          <p className="text-sm text-factory-text-dim mt-1">Create a forecast for an account or opportunity</p>
+          <p className="text-sm text-factory-text-dim mt-1">Enter your weekly forecast for the target quarter</p>
         </div>
 
         <div className="space-y-6">
+          {/* Period Selection */}
           <div className="card p-6">
             <h2 className="text-sm font-semibold text-factory-text-muted uppercase tracking-wider mb-4">
-              Period
+              Forecast Period
             </h2>
-            <PeriodSelector
-              periodType={periodType}
-              selectedYear={year}
-              selectedValue={value}
-              onPeriodTypeChange={setPeriodType}
-              onPeriodChange={(y, v) => { setYear(y); setValue(v); }}
-            />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Submission Week (read-only - current week) */}
+              <div>
+                <label className="label">Submission Week</label>
+                <div className="input bg-factory-bg cursor-not-allowed">
+                  <span className="font-mono">FY{submissionYear} W{submissionWeek}</span>
+                  <span className="text-factory-text-dim ml-2">(current week)</span>
+                </div>
+              </div>
+
+              {/* Target Quarter (selectable) */}
+              <div>
+                <label className="label">Target Quarter</label>
+                <select
+                  value={`${targetYear}-Q${targetQuarter}`}
+                  onChange={(e) => {
+                    const [y, q] = e.target.value.split('-Q');
+                    setTargetYear(parseInt(y));
+                    setTargetQuarter(parseInt(q));
+                  }}
+                  className="input"
+                >
+                  {[fiscalYear - 1, fiscalYear, fiscalYear + 1].map(y => 
+                    [1, 2, 3, 4].map(q => (
+                      <option key={`${y}-Q${q}`} value={`${y}-Q${q}`}>
+                        FY{y} Q{q}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-xs text-factory-text-dim mt-1">
+                  Q{targetQuarter} = Weeks {(targetQuarter - 1) * 13 + 1}-{targetQuarter * 13}
+                </p>
+              </div>
+            </div>
+
+            {/* Context Banner */}
+            <div className="mt-4 p-3 bg-factory-accent/10 border border-factory-accent/20 rounded-lg">
+              <p className="text-sm text-factory-text">
+                <span className="text-factory-text-muted">You are submitting a </span>
+                <span className="font-semibold">Week {submissionWeek}</span>
+                <span className="text-factory-text-muted"> forecast for </span>
+                <span className="font-semibold text-factory-accent">Q{targetQuarter} FY{targetYear}</span>
+              </p>
+            </div>
           </div>
 
+          {/* Account / Opportunity */}
           <div className="card p-6">
             <h2 className="text-sm font-semibold text-factory-text-muted uppercase tracking-wider mb-4">
               Account / Opportunity
@@ -265,13 +333,15 @@ export default function NewForecastPage() {
             )}
           </div>
 
+          {/* Forecast Categories */}
           <div className="card p-6">
             <h2 className="text-sm font-semibold text-factory-text-muted uppercase tracking-wider mb-4">
-              Forecast Categories
+              Q{targetQuarter} Forecast Categories
             </h2>
             <ForecastCategoryInput categories={categories} onChange={setCategories} />
           </div>
 
+          {/* Actions */}
           <div className="flex justify-end space-x-3">
             <button
               type="button"

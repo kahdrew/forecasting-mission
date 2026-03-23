@@ -1,5 +1,5 @@
 import { User, IUser } from '@/models/User';
-import { Forecast, IForecast, IForecastCategories, IPeriod } from '@/models/Forecast';
+import { Forecast, IForecast, IForecastCategories, IPeriod, ITargetPeriod, ISubmissionPeriod } from '@/models/Forecast';
 import { connectToDatabase } from './mongodb';
 import mongoose from 'mongoose';
 
@@ -139,6 +139,99 @@ export async function getTeamRollup(
 
   for (const report of directReports) {
     const rollup = await calculateRollup(report._id.toString(), period, true);
+    team.push(rollup);
+
+    totals.commit += rollup.adjustedCategories.commit;
+    totals.consumption += rollup.adjustedCategories.consumption;
+    totals.bestCase += rollup.adjustedCategories.bestCase;
+    totals.services += rollup.adjustedCategories.services;
+  }
+
+  return { team, totals };
+}
+
+// New quarterly rollup functions - forecasts entered weekly but targeting a quarter
+export async function calculateQuarterlyRollup(
+  userId: string,
+  targetPeriod: ITargetPeriod,
+  includeChildren: boolean = true,
+  submissionPeriod?: ISubmissionPeriod
+): Promise<RollupResult> {
+  await connectToDatabase();
+
+  const user = await User.findById(userId).lean();
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const query: Record<string, unknown> = {
+    repId: new mongoose.Types.ObjectId(userId),
+    'targetPeriod.quarter': targetPeriod.quarter,
+    'targetPeriod.year': targetPeriod.year,
+  };
+
+  // Optionally filter by submission week (to see forecasts from a specific week)
+  if (submissionPeriod) {
+    query['submissionPeriod.week'] = submissionPeriod.week;
+    query['submissionPeriod.year'] = submissionPeriod.year;
+  }
+
+  const forecasts = await Forecast.find(query).lean();
+
+  const categories = aggregateCategories(forecasts as IForecast[]);
+  const adjustedCategories = aggregateAdjustedCategories(forecasts as IForecast[]);
+
+  const result: RollupResult = {
+    userId: user._id.toString(),
+    userName: user.name,
+    role: user.role,
+    categories,
+    adjustedCategories,
+    forecastCount: forecasts.length,
+  };
+
+  if (includeChildren && (user.role === 'manager' || user.role === 'director' || user.role === 'admin')) {
+    const directReports = await getDirectReports(userId);
+    const children: RollupResult[] = [];
+
+    for (const report of directReports) {
+      const childRollup = await calculateQuarterlyRollup(report._id.toString(), targetPeriod, true, submissionPeriod);
+      children.push(childRollup);
+
+      result.categories.commit += childRollup.categories.commit;
+      result.categories.consumption += childRollup.categories.consumption;
+      result.categories.bestCase += childRollup.categories.bestCase;
+      result.categories.services += childRollup.categories.services;
+
+      result.adjustedCategories.commit += childRollup.adjustedCategories.commit;
+      result.adjustedCategories.consumption += childRollup.adjustedCategories.consumption;
+      result.adjustedCategories.bestCase += childRollup.adjustedCategories.bestCase;
+      result.adjustedCategories.services += childRollup.adjustedCategories.services;
+
+      result.forecastCount += childRollup.forecastCount;
+    }
+
+    if (children.length > 0) {
+      result.children = children;
+    }
+  }
+
+  return result;
+}
+
+export async function getTeamQuarterlyRollup(
+  managerId: string,
+  targetPeriod: ITargetPeriod,
+  submissionPeriod?: ISubmissionPeriod
+): Promise<{ team: RollupResult[]; totals: IForecastCategories }> {
+  await connectToDatabase();
+
+  const directReports = await getDirectReports(managerId);
+  const team: RollupResult[] = [];
+  const totals: IForecastCategories = { commit: 0, consumption: 0, bestCase: 0, services: 0 };
+
+  for (const report of directReports) {
+    const rollup = await calculateQuarterlyRollup(report._id.toString(), targetPeriod, true, submissionPeriod);
     team.push(rollup);
 
     totals.commit += rollup.adjustedCategories.commit;

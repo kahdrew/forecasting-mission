@@ -16,7 +16,9 @@ interface Forecast {
   categories: ForecastCategories;
   status: 'draft' | 'submitted' | 'approved';
   matchType: 'auto' | 'manual' | 'unmatched';
-  period: { type: string; year: number; value: number };
+  period?: { type: string; year: number; value: number };
+  submissionPeriod?: { week: number; year: number };
+  targetPeriod?: { quarter: number; year: number };
   sfData?: { amount: number; stage: string; probability: number } | null;
 }
 
@@ -81,6 +83,15 @@ export default function ForecastCard({ forecast }: ForecastCardProps) {
           <span className="text-sm text-factory-text-muted">Total</span>
           <span className="text-lg font-bold font-mono text-factory-text">${total.toLocaleString()}</span>
         </div>
+
+        {/* Period info */}
+        {forecast.targetPeriod && forecast.submissionPeriod && (
+          <div className="mt-2 pt-2 border-t border-factory-border text-xs text-factory-text-dim">
+            <span>Q{forecast.targetPeriod.quarter} FY{forecast.targetPeriod.year}</span>
+            <span className="mx-2">•</span>
+            <span>Submitted W{forecast.submissionPeriod.week}</span>
+          </div>
+        )}
 
         {forecast.sfData && (
           <div className="mt-2 pt-2 border-t border-factory-border text-xs text-factory-text-dim">
