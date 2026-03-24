@@ -108,7 +108,7 @@ export default function NewForecastPage() {
 
   useEffect(() => {
     async function searchOpportunities() {
-      if (searchQuery.length < 2) {
+      if (searchQuery.length < 2 || !user?.hasSalesforce) {
         setOpportunities([]);
         return;
       }
@@ -117,16 +117,17 @@ export default function NewForecastPage() {
         const res = await fetch(`/api/salesforce/opportunities?q=${encodeURIComponent(searchQuery)}`);
         if (res.ok) {
           const data = await res.json();
-          setOpportunities(data.opportunities);
+          setOpportunities(data.opportunities || []);
         }
       } catch (error) {
         console.error('Failed to search opportunities:', error);
+        setOpportunities([]);
       }
     }
 
     const debounce = setTimeout(searchOpportunities, 300);
     return () => clearTimeout(debounce);
-  }, [searchQuery]);
+  }, [searchQuery, user?.hasSalesforce]);
 
   const handleSelectOpp = (opp: Opportunity) => {
     setSelectedOpp(opp);
@@ -173,23 +174,27 @@ export default function NewForecastPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create forecast');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create forecast');
       }
 
       const data = await response.json();
 
       if (status === 'submitted') {
-        await fetch(`/api/forecasts/${data.forecast._id}`, {
+        const submitRes = await fetch(`/api/forecasts/${data.forecast._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'submitted' }),
         });
+        if (!submitRes.ok) {
+          console.error('Failed to submit forecast, saved as draft');
+        }
       }
 
       router.push('/');
     } catch (error) {
       console.error('Failed to save forecast:', error);
-      alert('Failed to save forecast');
+      alert(error instanceof Error ? error.message : 'Failed to save forecast');
     } finally {
       setIsSaving(false);
     }
