@@ -95,11 +95,15 @@ export async function POST(request: NextRequest) {
       value: submissionPeriod.week,
     };
 
+    const repId = typeof user._id === 'string' 
+      ? new mongoose.Types.ObjectId(user._id) 
+      : user._id;
+
     const forecast = await Forecast.create({
       opportunityId: opportunityId || null,
       opportunityName: opportunityName || null,
       accountName,
-      repId: user._id,
+      repId,
       repName: user.name,
       period,
       submissionPeriod,
@@ -110,14 +114,19 @@ export async function POST(request: NextRequest) {
       status: 'draft',
     });
 
-    await createHistoryEntry({
-      forecastId: forecast._id.toString(),
-      userId: user._id.toString(),
-      userName: user.name,
-      previousCategories: null,
-      newCategories: forecast.categories,
-      changeType: 'create',
-    });
+    try {
+      await createHistoryEntry({
+        forecastId: forecast._id.toString(),
+        userId: repId.toString(),
+        userName: user.name,
+        previousCategories: null,
+        newCategories: forecast.categories,
+        changeType: 'create',
+      });
+    } catch (historyError) {
+      console.error('Failed to create history entry:', historyError);
+      // Don't fail the whole request if history fails
+    }
 
     return NextResponse.json({
       forecast: {
@@ -128,6 +137,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Create forecast error:', error);
-    return NextResponse.json({ error: 'Failed to create forecast' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to create forecast';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
